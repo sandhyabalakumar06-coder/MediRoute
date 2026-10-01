@@ -1,0 +1,288 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(uuid())
+  name              String
+  email             String             @unique
+  passwordHash      String
+  phone             String?
+  role              Role
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  AmbulanceOperator AmbulanceOperator?
+  auditLogs         AuditLog[]
+  EmergencyRequest  EmergencyRequest[]
+  Hospital          Hospital?
+  notifications     Notification[]
+  PatientProfile    PatientProfile?
+
+  @@index([email])
+  @@index([role])
+}
+
+model Hospital {
+  id                   String                    @id @default(uuid())
+  userId               String?                   @unique
+  name                 String
+  registrationNumber   String?                   @unique
+  phone                String?
+  email                String?
+  address              String
+  city                 String
+  latitude             Float
+  longitude            Float
+  status               HospitalStatus            @default(ACTIVE)
+  emergencyDepartment  EmergencyDepartmentStatus @default(AVAILABLE)
+  icuBedsTotal         Int                       @default(0)
+  icuBedsAvailable     Int                       @default(0)
+  generalBedsTotal     Int                       @default(0)
+  generalBedsAvailable Int                       @default(0)
+  lastUpdated          DateTime
+  createdAt            DateTime                  @default(now())
+  bloodInventory       BloodInventory[]
+  EmergencyRequest     EmergencyRequest[]
+  User                 User?                     @relation(fields: [userId], references: [id])
+  HospitalDepartment   HospitalDepartment[]
+  Notification         Notification[]
+
+  @@index([city])
+  @@index([status])
+}
+
+model BloodInventory {
+  id          String     @id @default(uuid())
+  hospitalId  String
+  bloodGroup  BloodGroup
+  units       Int        @default(0)
+  lastUpdated DateTime
+  createdAt   DateTime   @default(now())
+  hospital    Hospital   @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@unique([hospitalId, bloodGroup])
+  @@index([bloodGroup])
+}
+
+model Ambulance {
+  id                String             @id @default(uuid())
+  operatorId        String?
+  vehicleNumber     String             @unique
+  driverName        String?
+  phone             String?
+  status            AmbulanceStatus    @default(AVAILABLE)
+  latitude          Float?
+  longitude         Float?
+  currentEta        Int?
+  lastUpdated       DateTime
+  createdAt         DateTime           @default(now())
+  AmbulanceOperator AmbulanceOperator? @relation(fields: [operatorId], references: [id])
+  EmergencyRequest  EmergencyRequest[]
+
+  @@index([status])
+  @@index([operatorId])
+}
+
+model Notification {
+  id          String            @id @default(uuid())
+  userId      String?
+  hospitalId  String?
+  emergencyId String?
+  type        NotificationType
+  title       String
+  message     String
+  isRead      Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  emergency   EmergencyRequest? @relation(fields: [emergencyId], references: [id], onDelete: Cascade)
+  Hospital    Hospital?         @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user        User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([emergencyId])
+  @@index([isRead])
+  @@index([hospitalId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model AmbulanceOperator {
+  id            String      @id
+  userId        String      @unique
+  licenseNumber String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime
+  Ambulance     Ambulance[]
+  User          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmergencyRequest {
+  id                     String                   @id
+  patientId              String
+  hospitalId             String?
+  ambulanceId            String?
+  coordinatorId          String?
+  severity               Severity
+  status                 EmergencyStatus          @default(CREATED)
+  description            String?
+  requiredDepartment     String?
+  requiredBloodGroup     BloodGroup?
+  pickupAddress          String
+  pickupLatitude         Float
+  pickupLongitude        Float
+  destinationEta         Int?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  completedAt            DateTime?
+  Ambulance              Ambulance?               @relation(fields: [ambulanceId], references: [id])
+  User                   User?                    @relation(fields: [coordinatorId], references: [id])
+  Hospital               Hospital?                @relation(fields: [hospitalId], references: [id])
+  PatientProfile         PatientProfile           @relation(fields: [patientId], references: [id])
+  EmergencyStatusHistory EmergencyStatusHistory[]
+  notifications          Notification[]
+
+  @@index([ambulanceId])
+  @@index([coordinatorId])
+  @@index([createdAt])
+  @@index([hospitalId])
+  @@index([patientId])
+  @@index([severity])
+  @@index([status])
+}
+
+model EmergencyStatusHistory {
+  id               String           @id
+  emergencyId      String
+  status           EmergencyStatus
+  note             String?
+  createdAt        DateTime         @default(now())
+  EmergencyRequest EmergencyRequest @relation(fields: [emergencyId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([emergencyId])
+}
+
+model HospitalDepartment {
+  id          String   @id
+  hospitalId  String
+  name        String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Hospital    Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@unique([hospitalId, name])
+  @@index([hospitalId])
+}
+
+model PatientProfile {
+  id                    String             @id
+  userId                String             @unique
+  dateOfBirth           DateTime?
+  gender                Gender?
+  bloodGroup            BloodGroup?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  address               String?
+  latitude              Float?
+  longitude             Float?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime
+  EmergencyRequest      EmergencyRequest[]
+  User                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bloodGroup])
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum EmergencyStatus {
+  CREATED
+  SEARCHING_HOSPITAL
+  HOSPITAL_SELECTED
+  AMBULANCE_REQUESTED
+  AMBULANCE_ASSIGNED
+  EN_ROUTE
+  HOSPITAL_NOTIFIED
+  ARRIVED
+  ADMITTED
+  COMPLETED
+  CANCELLED
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
+enum AmbulanceStatus {
+  AVAILABLE
+  ASSIGNED
+  EN_ROUTE
+  AT_HOSPITAL
+  MAINTENANCE
+  OFFLINE
+}
+
+enum EmergencyDepartmentStatus {
+  AVAILABLE
+  BUSY
+  CLOSED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum HospitalStatus {
+  ACTIVE
+  INACTIVE
+  TEMPORARILY_CLOSED
+}
+
+enum NotificationType {
+  EMERGENCY
+  AMBULANCE
+  HOSPITAL
+  SYSTEM
+}
+
+enum Role {
+  PATIENT
+  AMBULANCE_OPERATOR
+  HOSPITAL
+  EMERGENCY_COORDINATOR
+  ADMIN
+}
